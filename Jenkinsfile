@@ -1,12 +1,16 @@
 pipeline {
     agent any
 
+    environment {
+        DOCKER_HOST = "unix:///home/user/.docker/desktop/docker.sock"
+    }
+
     stages {
 
         stage('Checkout from GitHub') {
             steps {
                 git branch: 'master',
-                    url: 'https://github.com/laxmi916/node-k8s-app.git'
+                    url: 'https://github.com/NP0149/CI_CD.git'
             }
         }
 
@@ -19,39 +23,35 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh '''
-                docker build -t my-k8s-app:${BUILD_NUMBER} .
-                docker tag my-k8s-app:${BUILD_NUMBER} laxmi916/my-k8s-app:latest
+                docker build -t k8n:${BUILD_NUMBER} .
+                docker tag k8n:${BUILD_NUMBER} navyapasunuri06/ci_cd:${BUILD_NUMBER}
                 '''
             }
         }
 
-        stage('Push Docker Image') {
+        stage('Docker Login & Push') {
             steps {
-                sh 'docker push laxmi916/my-k8s-app:latest'
+                // Inject Docker token from Jenkins Credentials
+                withCredentials([string(credentialsId: 'DOCKER_HUB_TOKEN', variable: 'DOCKER_TOKEN')]) {
+                    sh '''
+                    echo $DOCKER_TOKEN | docker login -u navyapasunuri06 --password-stdin
+                    docker push navyapasunuri06/ci_cd:${BUILD_NUMBER}
+                    '''
+                }
             }
         }
 
-        stage('Start Minikube if not running') {
+        stage('Deploy Container') {
             steps {
                 sh '''
-                if ! minikube status | grep -q "apiserver: Running"; then
-                    echo "Minikube is not running. Starting now..."
-                    minikube start --driver=docker --memory=2048 --cpus=2
-                fi
-                '''
-            }
-        }
+                # Stop existing container if running
+                docker stop k8n-container || true
 
-        stage('Deploy to Kubernetes') {
-            steps {
-                sh '''
-                # Load latest image into Minikube
-                # minikube image load laxmi916/my-k8s-app:latest
+                # Remove existing container if exists
+                docker rm k8n-container || true
 
-                # Apply manifests
-                minikube kubectl -- apply -f k8s/deployment.yaml
-                minikube kubectl -- apply -f k8s/service.yaml
-                minikube service my-k8s-app-service
+                # Run new container
+                docker run -d -p 3000:8080 --name k8n-container navyapasunuri06/ci_cd:${BUILD_NUMBER}
                 '''
             }
         }
