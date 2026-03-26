@@ -9,7 +9,7 @@ pipeline {
 
         stage('Checkout from GitHub') {
             steps {
-                git branch: 'master',
+                git branch: 'main',
                     url: 'https://github.com/NP0149/CI_CD.git'
             }
         }
